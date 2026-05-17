@@ -97,25 +97,27 @@ export function useHunterState(userId: string | null): HunterStateApi {
 
     let cancelled = false;
     (async () => {
-      const cloud = await fetchCloudState(userId);
+      const result = await fetchCloudState(userId);
       if (cancelled) return;
-      if (cloud) {
+      if (result.kind === 'found') {
         // Pull cloud; run daily-reset on it before adopting
-        const { state: rolled, summary } = processDailyReset(cloud);
+        const { state: rolled, summary } = processDailyReset(result.state);
         setState(rolled);
         if (summary && summary.daysProcessed > 0) setResetSummary(summary);
+        cloudHydratedRef.current = true;
+        setSyncStatus('idle');
+      } else if (result.kind === 'empty') {
+        // No cloud row yet — push current local state up. Don't wipe local.
+        // (Local state was already initialized from localStorage or makeInitialState().)
+        const ok = await upsertCloudState(userId, state);
+        if (cancelled) return;
+        cloudHydratedRef.current = true;
+        setSyncStatus(ok ? 'idle' : 'error');
       } else {
-        // First time signing in for this user — start fresh as per chosen strategy
-        const fresh = makeInitialState();
-        setState(fresh);
-        const ok = await upsertCloudState(userId, fresh);
-        if (!ok && !cancelled) {
-          setSyncStatus('error');
-          return;
-        }
+        // Error reading cloud — keep using local state, allow retry on next change.
+        // Crucially, do NOT mark cloudHydrated so we don't blindly upsert.
+        setSyncStatus(navigator.onLine ? 'error' : 'offline');
       }
-      cloudHydratedRef.current = true;
-      setSyncStatus('idle');
     })();
 
     return () => {

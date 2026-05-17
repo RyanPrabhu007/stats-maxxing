@@ -3,7 +3,12 @@ import { supabase } from './supabase';
 
 const TABLE = 'hunter_states';
 
-export async function fetchCloudState(userId: string): Promise<HunterState | null> {
+export type CloudFetchResult =
+  | { kind: 'found'; state: HunterState }
+  | { kind: 'empty' }
+  | { kind: 'error'; message: string };
+
+export async function fetchCloudState(userId: string): Promise<CloudFetchResult> {
   const { data, error } = await supabase
     .from(TABLE)
     .select('state')
@@ -11,9 +16,10 @@ export async function fetchCloudState(userId: string): Promise<HunterState | nul
     .maybeSingle();
   if (error) {
     console.warn('[cloudSync] fetch failed', error.message);
-    return null;
+    return { kind: 'error', message: error.message };
   }
-  return (data?.state as HunterState | undefined) ?? null;
+  if (!data?.state) return { kind: 'empty' };
+  return { kind: 'found', state: data.state as HunterState };
 }
 
 export async function upsertCloudState(
