@@ -10,10 +10,16 @@ import {
   STREAK_BURST_BONUS_XP,
   STREAK_BURST_DAYS,
   getRankIndexForLevel,
+  monkMultiplier,
   xpToNextLevel,
 } from '../constants';
 import type { HunterState, Quest, QuestId, StatKey, Stats } from '../types';
 import { addDays, daysBetween, todayISO } from './date';
+import {
+  type MonkBreakSnapshot,
+  applyMonkDailyTransition,
+  defaultMonkMode,
+} from './monkLogic';
 
 export interface LevelUpEvent {
   newLevel: number;
@@ -42,7 +48,21 @@ export function makeInitialState(name = 'Hunter', now: Date = new Date()): Hunte
     lastOpenedAt: today,
     statChangesToday: {},
     highestRankIndex: 0,
+    monkMode: defaultMonkMode(),
   };
+}
+
+/** Ensure a state loaded from storage/cloud has all required fields (forward-compat). */
+export function ensureMonkMode(state: HunterState): HunterState {
+  if (state.monkMode) return state;
+  return { ...state, monkMode: defaultMonkMode() };
+}
+
+export function questXpReward(quest: Quest, state: HunterState): number {
+  const mult = state.monkMode?.active
+    ? monkMultiplier(state.monkMode.streakDays)
+    : 1.0;
+  return Math.round(quest.xpReward * mult);
 }
 
 function clampStat(v: number): number {
@@ -107,23 +127,28 @@ export function toggleQuest(
   const quest = state.quests.find((q) => q.id === questId);
   if (!quest) return { state, levelUps: [], questCompleted: false };
 
+  const mult = state.monkMode?.active
+    ? monkMultiplier(state.monkMode.streakDays)
+    : 1.0;
+  const mx = (n: number) => Math.round(n * mult);
+
   if (isCompleted) {
-    // Untoggle (same-day undo)
-    let xp = state.xp - quest.xpReward;
+    // Untoggle (same-day undo) — use the same multiplier we used when adding
+    let xp = state.xp - mx(quest.xpReward);
     let stats = questStatRevert(quest, state.stats);
     const newStreak = Math.max(0, quest.currentStreak - 1);
 
     // If this completion produced a 7-day burst bonus, undo it.
     const hitBurst = quest.currentStreak > 0 && quest.currentStreak % STREAK_BURST_DAYS === 0;
     if (hitBurst) {
-      xp -= STREAK_BURST_BONUS_XP;
+      xp -= mx(STREAK_BURST_BONUS_XP);
       stats = addToStat(stats, quest.primaryStat, -STREAK_BURST_BONUS_STAT);
     }
 
     // If this was the 5th quest (perfect day), revert that bonus.
     const wasPerfectDay = state.todayCompleted.length === state.quests.length;
     if (wasPerfectDay) {
-      xp -= PERFECT_DAY_BONUS_XP;
+      xp -= mx(PERFECT_DAY_BONUS_XP);
       stats = addToStat(stats, 'DIS', -PERFECT_DAY_BONUS_DIS);
     }
 
@@ -158,10 +183,10 @@ export function toggleQuest(
   const newStreak = quest.currentStreak + 1;
   const isBurst = newStreak > 0 && newStreak % STREAK_BURST_DAYS === 0;
 
-  let xp = state.xp + quest.xpReward;
+  let xp = state.xp + mx(quest.xpReward);
   let stats = questStatGain(quest, state.stats);
   if (isBurst) {
-    xp += STREAK_BURST_BONUS_XP;
+    xp += mx(STREAK_BURST_BONUS_XP);
     stats = addToStat(stats, quest.primaryStat, STREAK_BURST_BONUS_STAT);
   }
 
@@ -184,7 +209,7 @@ export function toggleQuest(
   const isPerfectDay = todayCompleted.length === state.quests.length;
 
   if (isPerfectDay) {
-    xp += PERFECT_DAY_BONUS_XP;
+    xp += mx(PERFECT_DAY_BONUS_XP);
     stats = addToStat(stats, 'DIS', PERFECT_DAY_BONUS_DIS);
     changes['DIS'] = 'up';
   }
@@ -213,6 +238,8 @@ export interface DailyResetSummary {
   decayedStats: Partial<Record<StatKey, number>>;
   skippedQuests: Record<string, number>;
   disciplineDecay: number;
+  monkBrokeAuto: MonkBreakSnapshot | null;
+  monkMilestonesReached: number[];
 }
 
 export function processDailyReset(
@@ -345,12 +372,17 @@ export function processDailyReset(
     }),
   };
 
+  // Monk Mode day transition (auto-break or +1 streak / DIS milestone)
+  const monkResult = applyMonkDailyTransition(working, today, gap);
+  working = monkResult.state;
+
   // Reset today
   const statChangesToday: HunterState['statChangesToday'] = {};
   for (const key of Object.keys(decayed) as StatKey[]) {
     if ((decayed[key] ?? 0) > 0) statChangesToday[key] = 'down';
   }
   if (disciplineDecay > 0) statChangesToday['DIS'] = 'down';
+  if (monkResult.milestonesReached.length > 0) statChangesToday['DIS'] = 'up';
 
   const newState: HunterState = {
     ...working,
@@ -368,6 +400,8 @@ export function processDailyReset(
       decayedStats: decayed,
       skippedQuests: skipped,
       disciplineDecay,
+      monkBrokeAuto: monkResult.autoBroke,
+      monkMilestonesReached: monkResult.milestonesReached,
     },
   };
 }

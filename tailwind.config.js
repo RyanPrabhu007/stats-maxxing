@@ -5,19 +5,19 @@ export default {
     extend: {
       colors: {
         bg: {
-          base: '#0a0a0f',
-          panel: '#0f1119',
-          deep: '#06070b',
+          base: 'rgb(var(--bg-base) / <alpha-value>)',
+          panel: 'rgb(var(--bg-panel) / <alpha-value>)',
+          deep: 'rgb(var(--bg-deep) / <alpha-value>)',
         },
         accent: {
-          cyan: '#00d4ff',
-          purple: '#8b5cf6',
+          cyan: 'rgb(var(--accent-cyan) / <alpha-value>)',
+          purple: 'rgb(var(--accent-purple) / <alpha-value>)',
         },
         success: '#00ff88',
         warning: '#ffaa00',
         danger: '#ff3355',
         text: {
-          primary: '#e8e8f0',
+          primary: 'rgb(var(--text-primary) / <alpha-value>)',
           muted: '#8b94a8',
           dim: '#5a6378',
         },

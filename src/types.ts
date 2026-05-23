@@ -35,6 +35,36 @@ export interface PendingEvent {
   payload?: Record<string, unknown>;
 }
 
+export interface MonkDailyCheckIn {
+  date: string;
+  noPorn: boolean;
+  noFap: boolean;
+}
+
+export type MonkRunOutcome = 'broken' | 'ended_voluntarily';
+
+export interface MonkRunHistory {
+  startedAt: string;
+  endedAt: string;
+  streakLength: number;
+  outcome: MonkRunOutcome;
+}
+
+export interface MonkBadge {
+  streakLength: number;
+  earnedAt: string;
+}
+
+export interface MonkMode {
+  active: boolean;
+  startedAt: string | null;
+  streakDays: number;
+  lastCheckInDate: string | null;
+  dailyCheckIn: MonkDailyCheckIn | null;
+  history: MonkRunHistory[];
+  badges: MonkBadge[];
+}
+
 export interface HunterState {
   hunterName: string;
   level: number;
@@ -48,6 +78,7 @@ export interface HunterState {
   lastOpenedAt: string;
   statChangesToday: Partial<Record<StatKey, 'up' | 'down'>>;
   highestRankIndex: number;
+  monkMode: MonkMode;
 }
 
 export type RankName =

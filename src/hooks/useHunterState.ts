@@ -5,10 +5,19 @@ import {
   type DayEditOverrides,
   type LevelUpEvent,
   editPastDay,
+  ensureMonkMode,
   makeInitialState,
   processDailyReset,
   toggleQuest,
 } from '../lib/hunterLogic';
+import {
+  type MonkBreakSnapshot,
+  activateMonk,
+  breakMonk,
+  setMonkCheckIn,
+  undoBreakMonk,
+  voluntaryEndMonk,
+} from '../lib/monkLogic';
 import { todayISO } from '../lib/date';
 import type { HunterState, QuestId } from '../types';
 import { fetchCloudState, upsertCloudState } from '../lib/cloudSync';
@@ -46,22 +55,38 @@ export interface HunterStateApi {
   resetSummary: DailyResetSummary | null;
   acknowledgeResetSummary: () => void;
   syncStatus: 'idle' | 'syncing' | 'error' | 'offline';
+  // Monk Mode
+  activateMonkMode: () => void;
+  toggleMonkCheckIn: (field: 'noPorn' | 'noFap') => void;
+  manualBreakMonk: () => void;
+  endMonkVoluntarily: () => void;
+  undoMonkBreak: () => void;
+  acknowledgeMonkBreak: () => void;
+  pendingMonkBreak: MonkBreakSnapshot | null;
 }
 
 export function useHunterState(userId: string | null): HunterStateApi {
   const [state, setState] = useState<HunterState>(() => {
     const stored = loadFromStorage();
     if (!stored) return makeInitialState();
-    const { state: rolled } = processDailyReset(stored);
+    const { state: rolled } = processDailyReset(ensureMonkMode(stored));
     return rolled;
   });
   const [pendingLevelUps, setPendingLevelUps] = useState<LevelUpEvent[]>([]);
   const [resetSummary, setResetSummary] = useState<DailyResetSummary | null>(() => {
     const stored = loadFromStorage();
     if (!stored) return null;
-    const { summary } = processDailyReset(stored);
+    const { summary } = processDailyReset(ensureMonkMode(stored));
     return summary && summary.daysProcessed > 0 ? summary : null;
   });
+  const [pendingMonkBreak, setPendingMonkBreak] = useState<MonkBreakSnapshot | null>(
+    () => {
+      const stored = loadFromStorage();
+      if (!stored) return null;
+      const { summary } = processDailyReset(ensureMonkMode(stored));
+      return summary?.monkBrokeAuto ?? null;
+    },
+  );
   const [syncStatus, setSyncStatus] = useState<HunterStateApi['syncStatus']>('idle');
   const devOffsetRef = useRef(0);
   const cloudHydratedRef = useRef(false);
@@ -80,6 +105,7 @@ export function useHunterState(userId: string | null): HunterStateApi {
         if (prev.todayDate === todayISO()) return prev;
         const { state: rolled, summary } = processDailyReset(prev);
         if (summary && summary.daysProcessed > 0) setResetSummary(summary);
+        if (summary?.monkBrokeAuto) setPendingMonkBreak(summary.monkBrokeAuto);
         return rolled;
       });
     }, 60_000);
@@ -104,9 +130,10 @@ export function useHunterState(userId: string | null): HunterStateApi {
       if (cancelled) return;
       if (result.kind === 'found') {
         // Pull cloud; run daily-reset on it before adopting
-        const { state: rolled, summary } = processDailyReset(result.state);
+        const { state: rolled, summary } = processDailyReset(ensureMonkMode(result.state));
         setState(rolled);
         if (summary && summary.daysProcessed > 0) setResetSummary(summary);
+        if (summary?.monkBrokeAuto) setPendingMonkBreak(summary.monkBrokeAuto);
         cloudHydratedRef.current = true;
         setSyncStatus('idle');
       } else if (result.kind === 'empty') {
@@ -182,8 +209,45 @@ export function useHunterState(userId: string | null): HunterStateApi {
       fakeNow.setDate(fakeNow.getDate() + devOffsetRef.current);
       const { state: rolled, summary } = processDailyReset(prev, fakeNow);
       if (summary && summary.daysProcessed > 0) setResetSummary(summary);
+      if (summary?.monkBrokeAuto) setPendingMonkBreak(summary.monkBrokeAuto);
       return rolled;
     });
+  }, []);
+
+  const activateMonkMode = useCallback(() => {
+    setState((prev) => activateMonk(prev));
+  }, []);
+
+  const toggleMonkCheckIn = useCallback((field: 'noPorn' | 'noFap') => {
+    setState((prev) => {
+      const current = prev.monkMode.dailyCheckIn?.[field] ?? false;
+      return setMonkCheckIn(prev, field, !current);
+    });
+  }, []);
+
+  const manualBreakMonk = useCallback(() => {
+    setState((prev) => {
+      const { state: next, snapshot } = breakMonk(prev, 'manual');
+      setPendingMonkBreak(snapshot);
+      return next;
+    });
+  }, []);
+
+  const endMonkVoluntarily = useCallback(() => {
+    setState((prev) => voluntaryEndMonk(prev));
+  }, []);
+
+  const undoMonkBreak = useCallback(() => {
+    setPendingMonkBreak((snap) => {
+      if (snap) {
+        setState((prev) => undoBreakMonk(prev, snap));
+      }
+      return null;
+    });
+  }, []);
+
+  const acknowledgeMonkBreak = useCallback(() => {
+    setPendingMonkBreak(null);
   }, []);
 
   const editDay = useCallback(
@@ -221,5 +285,12 @@ export function useHunterState(userId: string | null): HunterStateApi {
     resetSummary,
     acknowledgeResetSummary,
     syncStatus,
+    activateMonkMode,
+    toggleMonkCheckIn,
+    manualBreakMonk,
+    endMonkVoluntarily,
+    undoMonkBreak,
+    acknowledgeMonkBreak,
+    pendingMonkBreak,
   };
 }

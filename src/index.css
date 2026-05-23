@@ -4,39 +4,74 @@
 
 :root {
   color-scheme: dark;
+
+  /* Color tokens as RGB triplets so Tailwind can wrap them in rgb(... / <alpha>) */
+  --bg-base: 10 10 15;
+  --bg-panel: 15 17 25;
+  --bg-deep: 6 7 11;
+  --text-primary: 232 232 240;
+
+  --accent-cyan: 0 212 255;
+  --accent-purple: 139 92 246;
+
+  /* Background gradient radials */
+  --bg-radial-top: 0 80 160;
+  --bg-radial-bottom: 80 40 160;
+
+  --theme-glow: rgba(0, 212, 255, 0.45);
+}
+
+[data-theme='monk'] {
+  --bg-base: 26 5 5;
+  --bg-panel: 42 8 8;
+  --bg-deep: 14 2 2;
+  --text-primary: 255 232 220;
+
+  --accent-cyan: 255 59 31;
+  --accent-purple: 255 122 26;
+
+  --bg-radial-top: 200 40 0;
+  --bg-radial-bottom: 160 30 0;
+
+  --theme-glow: rgba(255, 59, 31, 0.55);
 }
 
 html,
 body,
 #root {
   height: 100%;
-  background: #0a0a0f;
+  background: rgb(var(--bg-base));
 }
 
 body {
   margin: 0;
   font-family: 'Inter', system-ui, sans-serif;
-  color: #e8e8f0;
+  color: rgb(var(--text-primary));
   background:
-    radial-gradient(ellipse at top, rgba(0, 80, 160, 0.18), transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(80, 40, 160, 0.12), transparent 60%),
-    #0a0a0f;
+    radial-gradient(ellipse at top, rgb(var(--bg-radial-top) / 0.18), transparent 60%),
+    radial-gradient(ellipse at bottom, rgb(var(--bg-radial-bottom) / 0.12), transparent 60%),
+    rgb(var(--bg-base));
   background-attachment: fixed;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.4s ease, color 0.4s ease;
 }
 
 @layer components {
   .status-window {
     position: relative;
-    border: 1px solid rgba(0, 212, 255, 0.35);
-    background: linear-gradient(180deg, rgba(15, 17, 25, 0.85) 0%, rgba(10, 11, 16, 0.85) 100%);
+    border: 1px solid rgb(var(--accent-cyan) / 0.35);
+    background: linear-gradient(
+      180deg,
+      rgb(var(--bg-panel) / 0.85) 0%,
+      rgb(var(--bg-base) / 0.85) 100%
+    );
     backdrop-filter: blur(6px);
     border-radius: 6px;
     box-shadow:
-      inset 0 0 18px rgba(0, 212, 255, 0.06),
-      0 0 22px rgba(0, 212, 255, 0.05);
+      inset 0 0 18px rgb(var(--accent-cyan) / 0.06),
+      0 0 22px rgb(var(--accent-cyan) / 0.05);
   }
 
   .status-window::before,
@@ -45,7 +80,7 @@ body {
     position: absolute;
     width: 14px;
     height: 14px;
-    border-color: #00d4ff;
+    border-color: rgb(var(--accent-cyan));
     border-style: solid;
     border-width: 0;
     pointer-events: none;
@@ -70,7 +105,7 @@ body {
     position: absolute;
     width: 14px;
     height: 14px;
-    border-color: #00d4ff;
+    border-color: rgb(var(--accent-cyan));
     border-style: solid;
     border-width: 0;
     pointer-events: none;
@@ -91,25 +126,33 @@ body {
 
   .btn-primary {
     @apply px-4 py-2 font-heading uppercase tracking-wider text-sm rounded;
-    background: linear-gradient(180deg, rgba(0, 212, 255, 0.18), rgba(0, 212, 255, 0.05));
-    border: 1px solid rgba(0, 212, 255, 0.55);
-    color: #00d4ff;
+    background: linear-gradient(
+      180deg,
+      rgb(var(--accent-cyan) / 0.18),
+      rgb(var(--accent-cyan) / 0.05)
+    );
+    border: 1px solid rgb(var(--accent-cyan) / 0.55);
+    color: rgb(var(--accent-cyan));
     transition: all 0.18s ease;
   }
   .btn-primary:hover {
-    background: linear-gradient(180deg, rgba(0, 212, 255, 0.32), rgba(0, 212, 255, 0.1));
-    box-shadow: 0 0 16px rgba(0, 212, 255, 0.45);
+    background: linear-gradient(
+      180deg,
+      rgb(var(--accent-cyan) / 0.32),
+      rgb(var(--accent-cyan) / 0.1)
+    );
+    box-shadow: 0 0 16px rgb(var(--accent-cyan) / 0.45);
   }
 
   .btn-ghost {
     @apply px-3 py-1.5 font-heading uppercase tracking-wider text-xs rounded;
-    border: 1px solid rgba(232, 232, 240, 0.18);
-    color: #e8e8f0;
+    border: 1px solid rgb(var(--text-primary) / 0.18);
+    color: rgb(var(--text-primary));
     transition: all 0.18s ease;
   }
   .btn-ghost:hover {
-    border-color: rgba(0, 212, 255, 0.55);
-    color: #00d4ff;
+    border-color: rgb(var(--accent-cyan) / 0.55);
+    color: rgb(var(--accent-cyan));
   }
 
   .btn-danger {
@@ -129,12 +172,50 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0a0a0f;
+  background: rgb(var(--bg-base));
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.25);
+  background: rgb(var(--accent-cyan) / 0.25);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 212, 255, 0.5);
+  background: rgb(var(--accent-cyan) / 0.5);
+}
+
+/* Monk Mode flame particles overlay */
+[data-theme='monk'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(255, 90, 0, 0.08) 0px, transparent 50px),
+    radial-gradient(circle at 70% 90%, rgba(255, 120, 0, 0.06) 0px, transparent 80px),
+    radial-gradient(circle at 50% 100%, rgba(255, 60, 0, 0.1) 0px, transparent 120px);
+  animation: monkFlame 8s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+@keyframes monkFlame {
+  0% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-6px) scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes monkPulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(255, 59, 31, 0.4), 0 0 22px rgba(255, 122, 26, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(255, 59, 31, 0.85), 0 0 36px rgba(255, 122, 26, 0.5);
+  }
+}
+
+.monk-pulse {
+  animation: monkPulse 2.2s ease-in-out infinite;
 }

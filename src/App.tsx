@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Settings } from 'lucide-react';
 import { useHunterState } from './hooks/useHunterState';
 import { useAuth } from './hooks/useAuth';
@@ -14,8 +14,17 @@ import { SettingsModal } from './components/SettingsModal';
 import { ReturnOfHunter } from './components/ReturnOfHunter';
 import { AuthGate } from './components/AuthGate';
 import {
+  MonkActivationFx,
+  MonkActivationModal,
+  MonkBreakModal,
+  MonkDashboard,
+  MonkModeButton,
+} from './components/MonkMode';
+import {
   isMuted,
   playLevelUp,
+  playMonkActivate,
+  playMonkBreak,
   playQuestComplete,
   playRankUp,
   setMuted,
@@ -38,11 +47,22 @@ export default function App() {
     resetSummary,
     acknowledgeResetSummary,
     syncStatus,
+    activateMonkMode,
+    toggleMonkCheckIn,
+    manualBreakMonk,
+    endMonkVoluntarily,
+    undoMonkBreak,
+    acknowledgeMonkBreak,
+    pendingMonkBreak,
   } = api;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [monkActivationOpen, setMonkActivationOpen] = useState(false);
+  const [monkDashboardOpen, setMonkDashboardOpen] = useState(false);
+  const [monkFxTrigger, setMonkFxTrigger] = useState(0);
   const [muted, setMutedState] = useState(isMuted());
+  const monkPrevActiveRef = useRef(state.monkMode.active);
 
   const onToggleMute = useCallback(() => {
     setMutedState((m) => {
@@ -79,6 +99,38 @@ export default function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [advanceDay]);
+
+  // Apply monk theme to document root
+  useEffect(() => {
+    const el = document.documentElement;
+    if (state.monkMode.active) el.setAttribute('data-theme', 'monk');
+    else el.removeAttribute('data-theme');
+  }, [state.monkMode.active]);
+
+  // Fire flash + sound on activation transitions (off -> on)
+  useEffect(() => {
+    const prev = monkPrevActiveRef.current;
+    monkPrevActiveRef.current = state.monkMode.active;
+    if (!prev && state.monkMode.active) {
+      setMonkFxTrigger((n) => n + 1);
+      playMonkActivate();
+    }
+  }, [state.monkMode.active]);
+
+  // Sound on monk break (manual or auto)
+  useEffect(() => {
+    if (pendingMonkBreak) playMonkBreak();
+  }, [pendingMonkBreak]);
+
+  const handleMonkButtonClick = () => {
+    if (state.monkMode.active) setMonkDashboardOpen(true);
+    else setMonkActivationOpen(true);
+  };
+
+  const handleMonkActivate = () => {
+    activateMonkMode();
+    setMonkActivationOpen(false);
+  };
 
   if (auth.loading) {
     return (
@@ -158,6 +210,35 @@ export default function App() {
         userEmail={auth.user.email ?? null}
         onSignOut={handleSignOut}
         syncStatus={syncStatus}
+      />
+
+      <MonkModeButton
+        active={state.monkMode.active}
+        streakDays={state.monkMode.streakDays}
+        onClick={handleMonkButtonClick}
+      />
+
+      <MonkActivationModal
+        open={monkActivationOpen}
+        onCancel={() => setMonkActivationOpen(false)}
+        onActivate={handleMonkActivate}
+      />
+
+      <MonkActivationFx trigger={monkFxTrigger} />
+
+      <MonkDashboard
+        open={monkDashboardOpen}
+        onClose={() => setMonkDashboardOpen(false)}
+        state={state}
+        onToggleCheckIn={toggleMonkCheckIn}
+        onManualBreak={manualBreakMonk}
+        onVoluntaryEnd={endMonkVoluntarily}
+      />
+
+      <MonkBreakModal
+        snapshot={pendingMonkBreak}
+        onUndo={undoMonkBreak}
+        onAcknowledge={acknowledgeMonkBreak}
       />
     </div>
   );

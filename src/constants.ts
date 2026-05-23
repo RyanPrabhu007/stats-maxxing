@@ -129,3 +129,19 @@ export function getRankIndexForLevel(level: number): number {
 export function xpToNextLevel(level: number): number {
   return 100 * level;
 }
+
+// === Monk Mode ===
+export const MONK_MULTIPLIER_TIER_1_DAYS = 7;
+export const MONK_MULTIPLIER_TIER_2_DAYS = 14;
+export const MONK_MULTIPLIER_TIER_1 = 1.5;
+export const MONK_MULTIPLIER_TIER_2 = 2.0;
+export const MONK_DIS_BONUS_PER_MILESTONE = 1;
+export const MONK_MILESTONE_DAYS = 7;
+export const MONK_BREAK_UNDO_WINDOW_MS = 30_000;
+export const MONK_BADGE_MIN_STREAK = 7;
+
+export function monkMultiplier(streakDays: number): number {
+  if (streakDays >= MONK_MULTIPLIER_TIER_2_DAYS) return MONK_MULTIPLIER_TIER_2;
+  if (streakDays >= MONK_MULTIPLIER_TIER_1_DAYS) return MONK_MULTIPLIER_TIER_1;
+  return 1.0;
+}
