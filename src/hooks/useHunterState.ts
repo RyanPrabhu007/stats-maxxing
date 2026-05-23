@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { STORAGE_KEY } from '../constants';
 import {
   type DailyResetSummary,
+  type DayEditOverrides,
   type LevelUpEvent,
+  editPastDay,
   makeInitialState,
   processDailyReset,
   toggleQuest,
@@ -38,6 +40,7 @@ export interface HunterStateApi {
   importJSON: (s: HunterState) => void;
   exportJSON: () => string;
   advanceDay: () => void; // dev shortcut
+  editDay: (date: string, completed: QuestId[], overrides?: DayEditOverrides) => void;
   pendingLevelUps: LevelUpEvent[];
   acknowledgeLevelUp: () => void;
   resetSummary: DailyResetSummary | null;
@@ -183,6 +186,19 @@ export function useHunterState(userId: string | null): HunterStateApi {
     });
   }, []);
 
+  const editDay = useCallback(
+    (date: string, completed: QuestId[], overrides?: DayEditOverrides) => {
+      setState((prev) => {
+        const result = editPastDay(prev, date, completed, overrides);
+        if (result.levelUps.length > 0) {
+          setPendingLevelUps((ev) => [...ev, ...result.levelUps]);
+        }
+        return result.state;
+      });
+    },
+    [],
+  );
+
   const acknowledgeLevelUp = useCallback(() => {
     setPendingLevelUps((ev) => ev.slice(1));
   }, []);
@@ -199,6 +215,7 @@ export function useHunterState(userId: string | null): HunterStateApi {
     importJSON,
     exportJSON,
     advanceDay,
+    editDay,
     pendingLevelUps,
     acknowledgeLevelUp,
     resetSummary,

@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react';
-import { addDays, formatDateLong, todayISO } from '../lib/date';
+import { Pencil } from 'lucide-react';
+import { addDays, daysBetween, formatDateLong, todayISO } from '../lib/date';
 import type { HunterState, QuestId } from '../types';
 
 interface Props {
   state: HunterState;
+  onEditDay?: (date: string) => void;
 }
+
+const EDIT_WINDOW_DAYS = 7;
 
 const createdAtKey = (s: HunterState) => s.createdAt;
 
@@ -30,11 +34,11 @@ function colorForCount(
   return 'rgba(0, 255, 136, 0.85)';
 }
 
-export function QuestLog({ state }: Props) {
+export function QuestLog({ state, onEditDay }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
+  const today = todayISO();
 
   const cells = useMemo<DayCell[]>(() => {
-    const today = todayISO();
     const start = addDays(today, -29);
     const arr: DayCell[] = [];
     const created = createdAtKey(state);
@@ -57,7 +61,7 @@ export function QuestLog({ state }: Props) {
       });
     }
     return arr;
-  }, [state.history, state.todayCompleted, state]);
+  }, [state.history, state.todayCompleted, state, today]);
 
   const totalQuests = state.quests.length;
   const selectedCell = selected ? cells.find((c) => c.date === selected) : null;
@@ -120,8 +124,23 @@ export function QuestLog({ state }: Props) {
             className="mt-3 pt-3 border-t border-accent-cyan/20 text-sm"
             key={selectedCell.date}
           >
-            <div className="font-heading uppercase tracking-wider text-text-muted text-xs mb-1">
-              {formatDateLong(selectedCell.date)}
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <div className="font-heading uppercase tracking-wider text-text-muted text-xs">
+                {formatDateLong(selectedCell.date)}
+              </div>
+              {onEditDay &&
+                !selectedCell.isToday &&
+                state.history.some((h) => h.date === selectedCell.date) &&
+                daysBetween(selectedCell.date, today) <= EDIT_WINDOW_DAYS && (
+                  <button
+                    onClick={() => onEditDay(selectedCell.date)}
+                    className="btn-ghost flex items-center gap-1"
+                    aria-label={`Edit ${selectedCell.date}`}
+                  >
+                    <Pencil size={12} />
+                    Edit
+                  </button>
+                )}
             </div>
             {selectedCell.count === 0 ? (
               <div className="text-danger">No quests completed.</div>

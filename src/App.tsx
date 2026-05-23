@@ -9,6 +9,7 @@ import { WarningsPanel } from './components/WarningsPanel';
 import { LevelUpOverlay } from './components/LevelUpOverlay';
 import { StatHistory } from './components/StatHistory';
 import { QuestLog } from './components/QuestLog';
+import { DayEditModal } from './components/DayEditModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ReturnOfHunter } from './components/ReturnOfHunter';
 import { AuthGate } from './components/AuthGate';
@@ -31,6 +32,7 @@ export default function App() {
     importJSON,
     exportJSON,
     advanceDay,
+    editDay,
     pendingLevelUps,
     acknowledgeLevelUp,
     resetSummary,
@@ -39,6 +41,7 @@ export default function App() {
   } = api;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
   const [muted, setMutedState] = useState(isMuted());
 
   const onToggleMute = useCallback(() => {
@@ -126,7 +129,7 @@ export default function App() {
 
         <StatHistory state={state} />
 
-        <QuestLog state={state} />
+        <QuestLog state={state} onEditDay={setEditingDate} />
 
         <footer className="text-center text-text-dim text-[10px] font-heading uppercase tracking-[0.4em] py-4">
           Arise.
@@ -134,6 +137,14 @@ export default function App() {
       </div>
 
       <LevelUpOverlay event={currentEvent} onAcknowledge={acknowledgeLevelUp} />
+
+      <DayEditModal
+        open={editingDate !== null}
+        onClose={() => setEditingDate(null)}
+        state={state}
+        date={editingDate}
+        onSave={editDay}
+      />
 
       <SettingsModal
         open={settingsOpen}

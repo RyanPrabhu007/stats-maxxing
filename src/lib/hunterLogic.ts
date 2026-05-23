@@ -377,3 +377,178 @@ export function questsAtRisk(state: HunterState): Quest[] {
     (q) => q.daysSinceLastCompletion >= 3 && !state.todayCompleted.includes(q.id),
   );
 }
+
+// Recompute a quest's currentStreak + daysSinceLastCompletion from history + todayCompleted.
+// daysSinceLastCompletion follows the existing convention: 0 if completed today OR yesterday,
+// otherwise (days between most-recent completion and today) - 1.
+function recomputeQuestProgress(
+  state: HunterState,
+  questId: QuestId,
+): { currentStreak: number; daysSinceLastCompletion: number } {
+  const today = state.todayDate;
+  const doneToday = state.todayCompleted.includes(questId);
+  const historyByDate = new Map<string, QuestId[]>(
+    state.history.map((d) => [d.date, d.completedQuests]),
+  );
+
+  let streak = doneToday ? 1 : 0;
+  let cursor = addDays(today, -1);
+  for (let i = 0; i < state.history.length + 1; i++) {
+    const entry = historyByDate.get(cursor);
+    if (!entry || !entry.includes(questId)) break;
+    streak++;
+    cursor = addDays(cursor, -1);
+  }
+
+  let daysSince: number;
+  if (doneToday) {
+    daysSince = 0;
+  } else {
+    let mostRecent: string | null = null;
+    let walkCursor = addDays(today, -1);
+    for (let i = 0; i < state.history.length + 1; i++) {
+      const entry = historyByDate.get(walkCursor);
+      if (entry && entry.includes(questId)) {
+        mostRecent = walkCursor;
+        break;
+      }
+      walkCursor = addDays(walkCursor, -1);
+      if (walkCursor < state.createdAt) break;
+    }
+    daysSince = mostRecent
+      ? Math.max(0, daysBetween(mostRecent, today) - 1)
+      : Math.max(0, daysBetween(state.createdAt, today) - 1);
+  }
+
+  return { currentStreak: streak, daysSinceLastCompletion: daysSince };
+}
+
+export interface DayEditOverrides {
+  xp?: number;
+  stats?: Partial<Stats>;
+}
+
+export interface EditPastDayResult {
+  state: HunterState;
+  levelUps: LevelUpEvent[];
+}
+
+/**
+ * Edit a past day's completedQuests (and optionally override top-level xp/stats).
+ * Applies XP + stat deltas for added/removed quests, fixes perfect-day bonus,
+ * recomputes affected quest streaks, then runs level-up check.
+ *
+ * `date` must be in state.history (i.e., a past day, not today).
+ */
+export function editPastDay(
+  state: HunterState,
+  date: string,
+  newCompleted: QuestId[],
+  overrides: DayEditOverrides = {},
+): EditPastDayResult {
+  const historyIdx = state.history.findIndex((h) => h.date === date);
+  if (historyIdx === -1) {
+    return { state, levelUps: [] };
+  }
+  const prev = state.history[historyIdx];
+  const prevSet = new Set(prev.completedQuests);
+  const nextSet = new Set(newCompleted);
+  const totalQuests = state.quests.length;
+
+  const added: QuestId[] = newCompleted.filter((q) => !prevSet.has(q));
+  const removed: QuestId[] = prev.completedQuests.filter((q) => !nextSet.has(q));
+
+  let xp = state.xp;
+  let stats = { ...state.stats };
+  const affectedQuests = new Set<QuestId>([...added, ...removed]);
+
+  for (const qid of added) {
+    const q = state.quests.find((x) => x.id === qid);
+    if (!q) continue;
+    xp += q.xpReward;
+    stats = questStatGain(q, stats);
+  }
+  for (const qid of removed) {
+    const q = state.quests.find((x) => x.id === qid);
+    if (!q) continue;
+    xp -= q.xpReward;
+    stats = questStatRevert(q, stats);
+  }
+
+  const wasPerfect = prev.completedQuests.length === totalQuests;
+  const isPerfect = newCompleted.length === totalQuests;
+  if (!wasPerfect && isPerfect) {
+    xp += PERFECT_DAY_BONUS_XP;
+    stats = addToStat(stats, 'DIS', PERFECT_DAY_BONUS_DIS);
+  } else if (wasPerfect && !isPerfect) {
+    xp -= PERFECT_DAY_BONUS_XP;
+    stats = addToStat(stats, 'DIS', -PERFECT_DAY_BONUS_DIS);
+  }
+
+  // Patch history entry
+  const newHistory = [...state.history];
+  const snapshotDelta: Partial<Stats> = {};
+  for (const k of Object.keys(stats) as StatKey[]) {
+    snapshotDelta[k] = stats[k] - state.stats[k];
+  }
+  const newSnapshot: Stats | undefined = prev.statsSnapshot
+    ? {
+        STR: clampStat(prev.statsSnapshot.STR + (snapshotDelta.STR ?? 0)),
+        VIT: clampStat(prev.statsSnapshot.VIT + (snapshotDelta.VIT ?? 0)),
+        GER: clampStat(prev.statsSnapshot.GER + (snapshotDelta.GER ?? 0)),
+        WIS: clampStat(prev.statsSnapshot.WIS + (snapshotDelta.WIS ?? 0)),
+        DIS: clampStat(prev.statsSnapshot.DIS + (snapshotDelta.DIS ?? 0)),
+      }
+    : undefined;
+  newHistory[historyIdx] = {
+    ...prev,
+    completedQuests: [...newCompleted],
+    perfectDay: isPerfect,
+    statsSnapshot: newSnapshot,
+  };
+
+  // Apply absolute overrides on top (god-mode)
+  if (overrides.xp !== undefined && overrides.xp >= 0) {
+    xp = Math.floor(overrides.xp);
+  }
+  if (overrides.stats) {
+    for (const k of Object.keys(overrides.stats) as StatKey[]) {
+      const v = overrides.stats[k];
+      if (v !== undefined) stats[k] = clampStat(Math.floor(v));
+    }
+  }
+
+  if (xp < 0) xp = 0;
+
+  // Recompute streaks for any quests whose completion status changed
+  let newQuests = state.quests.map((q) => ({ ...q }));
+  if (affectedQuests.size > 0) {
+    const tempState: HunterState = { ...state, history: newHistory };
+    newQuests = newQuests.map((q) => {
+      if (!affectedQuests.has(q.id)) return q;
+      const { currentStreak, daysSinceLastCompletion } = recomputeQuestProgress(
+        tempState,
+        q.id,
+      );
+      return {
+        ...q,
+        currentStreak,
+        longestStreak: Math.max(q.longestStreak, currentStreak),
+        daysSinceLastCompletion,
+      };
+    });
+  }
+
+  let next: HunterState = {
+    ...state,
+    xp,
+    stats,
+    quests: newQuests,
+    history: newHistory,
+  };
+
+  const { state: leveledState, events } = checkLevelUps(next);
+  next = leveledState;
+
+  return { state: next, levelUps: events };
+}
